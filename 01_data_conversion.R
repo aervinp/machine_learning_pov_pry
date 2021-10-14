@@ -325,6 +325,13 @@ setdiff(names(file_2018), names(file_2020))
 setdiff(names(file_2019), names(file_2020))
 
 
+# merge full file ----------------------------------------------------------------
+full_file <- 
+  file_2018 %>%
+  bind_rows(file_2019) %>%
+  bind_rows(file_2020)
+
+rm(list = objects()[str_starts(objects(), pattern = "file_")])
 
 
 
