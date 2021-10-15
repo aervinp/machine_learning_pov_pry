@@ -333,6 +333,8 @@ full_file <-
 
 rm(list = objects()[str_starts(objects(), pattern = "file_")])
 
+write_csv(full_file, "data/merged_allyears.csv")
 
-
+# snapshot packages --------------------------------------------------------------
+renv::snapshot()
 

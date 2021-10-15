@@ -10,5 +10,6 @@ renv::init()
 # Install packages and snapshot
 
 install.packages("tidyverse")
+install.packages("janitor")
 
 renv::snapshot()
