@@ -72,7 +72,8 @@ full_file <-
          hh_old_dependents = hh_miembros_65ymas,
          hh_females = sum(as.numeric(female==1)),
          hh_males = sum(as.numeric(female==0)),
-         hh_tekopora = max(as.numeric(ing_tekopora>0))) %>%
+         hh_tekopora = max(as.numeric(ing_tekopora>0)),
+         hh_totpers = totpers) %>%
   ungroup
 
 ## vivienda características --------------------------------------------------------------------------------
@@ -85,11 +86,11 @@ vivi_vars <- Hmisc::Cs(tipo_combustible, tipo_agua_fuente, tipo_agua_fuente_bebe
                        tipo_vivienda, tipo_agua_proveedor, tiene_luz_electrica, tiene_linea_fija,
                        tiene_celular, tiene_banho, tipo_lote_propiedad, tiene_computadora,
                        tiene_tableta, tiene_internet, tiene_radio, tiene_televisor, tiene_heladera,
-                       tiene_cocina_gas, tiene_cocina_elec, tiene_lavarropas)
+                       tiene_cocina_gas, tiene_cocina_elec, tiene_lavarropas, nro_piezas, nro_dormitorios)
 
 full_file <- 
   full_file %>% 
-  rename_at(vars(vivi_vars), ~gsub("tipo|tiene", "vivi", .))
+  rename_at(vars(vivi_vars), ~gsub("tipo|tiene|nro", "vivi", .))
 
 full_file <- 
   full_file %>% 
