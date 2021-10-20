@@ -1,11 +1,11 @@
 library(tidyverse)
 
+# Read in the dta files ------------------------------------------------------------
+
 survey_years <- c(2018:2020)
 
 for (i in 1:length(survey_years)) {
 
-# Read in the dta files ------------------------------------------------------------
-  
 assign(paste0("reg01_", survey_years[i]), 
        haven::read_dta(paste0("data/EPH_", survey_years[i], "/reg01_ephc", survey_years[i], ".dta"),
                        encoding = "UTF-8"))
@@ -17,7 +17,6 @@ assign(paste0("reg02_", survey_years[i]),
 assign(paste0("ingrefam_", survey_years[i]), 
        haven::read_dta(paste0("data/EPH_", survey_years[i], "/ingrefam_ephc", survey_years[i], ".dta"),
                        encoding = "UTF-8"))
-
 }
 
 # 2018 Harmonize --------------------------------------------------------------------
@@ -324,8 +323,8 @@ setdiff(names(file_2018), names(file_2019))
 setdiff(names(file_2018), names(file_2020))
 setdiff(names(file_2019), names(file_2020))
 
-
 # merge full file ----------------------------------------------------------------
+
 full_file <- 
   file_2018 %>%
   bind_rows(file_2019) %>%
@@ -336,5 +335,6 @@ rm(list = objects()[str_starts(objects(), pattern = "file_")])
 write_csv(full_file, "data/merged_allyears.csv")
 
 # snapshot packages --------------------------------------------------------------
+
 renv::snapshot()
 
