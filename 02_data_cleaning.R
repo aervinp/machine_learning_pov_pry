@@ -8,6 +8,14 @@ full_file <- read_csv("data/merged_allyears.csv")
 
 # select data for rural and household members --------------------------------------------------------------------
 
+# first identify households with personal domestico
+full_file <- 
+  full_file %>% 
+  group_by(upm, nvivi, nhoga, year) %>% 
+  mutate(hh_personal_domestico = max(as.numeric(relacion_parentesco==11))) %>% 
+  ungroup
+
+# drop urban areas and non-household members
 full_file <- 
   full_file %>% 
   filter(area == 6 & relacion_parentesco<=10)
@@ -62,7 +70,6 @@ full_file <-
   group_by(upm, nvivi, nhoga, year) %>% 
   mutate(hh_conyuge_present = max(as.numeric(relacion_parentesco==2)),
          hh_tipo_hogar = tipo_hogar,
-         hh_personal_domestico = max(as.numeric(relacion_parentesco==11)),
          hh_miembros_5ymenos = sum(as.numeric(edad<6)),
          hh_miembros_6a14 = sum(as.numeric(edad>=6 & edad<15)),
          hh_miembros_15a64 = sum(as.numeric(edad>=15 & edad<65)),

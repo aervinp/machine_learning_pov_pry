@@ -15,9 +15,9 @@ library(FactoMineR)
 library(vcd)
 library(colorspace)
 
-# load household data created in 02_data_cleaning.R ----------------------------------------------------------------------
+# load household data created in 03_encoding_categorical_numerical.R ----------------------------------------------------------------------
 
-hhfile <- read_csv("data/hh_merged_allyears.csv")
+hhfile <- read_rds("data/hh_merged_allyears_cleaned.rds")
 
 # training set
 training <- 
