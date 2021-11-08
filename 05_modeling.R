@@ -1,18 +1,20 @@
 library(tidyverse)
 library(tidymodels)
+library(glmnet)
 
 # data ---------------------------------------------------------------------------------------------
 
 hhfile <- 
-  read_csv("data/hh_merged_allyears.csv") %>% 
-  mutate(lnipcm = log(ipcm),
-         poverty = factor(case_when(ipcm<linea_pobreza_total ~ "pov",
-                                       ipcm>=linea_pobreza_total ~ "non_pov"), 
-                             levels = c("pov", "non_pov")))
+  read_rds("data/hh_merged_allyears_cleaned.rds")
 
-# check levels of poverty --------------------------------------------------------------------------
+# missing values --------------------------------------------------------------------------
+allNA <- hhfile %>% mutate_if(is.factor, ~as.numeric(.)) %>%  summarize_if(is.numeric, mean) %>% select(where(is.na)) %>% names()
+numNA <- hhfile %>% summarize_if(is.numeric, mean) %>% select(where(is.na)) %>% names()
 
-levels(hhfile[["poverty"]])
+nominal_NAs <- allNA[(!allNA %in% numNA)]
+numeric_NAs <- allNA[!(allNA %in% nominal_NAs)]
+
+# model on 2018 survey --------------------------------------------------------------------
 
 hh2018 <- 
   hhfile %>% 
@@ -23,17 +25,16 @@ hh2018 <-
 set.seed(123)
 
 hhsplit <- 
-  hh2018 %>% 
-  initial_split(prop = 0.75, strata = ipcm)
+  hh2018 %>% initial_split(prop = 0.75, strata = ipcm, breaks = 10)
 
-hhtraining <- 
-  training(hhsplit)
+hhtrain <- training(hhsplit)
+hhtesting <- testing(hhsplit)
 
-hhtesting <- 
-  testing(hhsplit)
+set.seed(456)
+hhfolds <- vfold_cv(hhtrain, strata = ipcm, breaks = 10)
 
 # Distribution of ipcm in data
-hhtraining %>% group_by(dptorep) %>% 
+hh2018 %>% group_by(dptorep) %>% 
   summarize(min_ipcm = min(ipcm),
             max_ipcm = max(ipcm),
             mean_ipcm = mean(ipcm),
@@ -45,12 +46,90 @@ hhtesting %>% group_by(dptorep) %>%
             mean_ipcm = mean(ipcm),
             sd_ipcm = sd(ipcm))
 
-# linear regression -------------------------------------------------------------------------------------------------
+# Recipe ----------------------------------------------------------------------------------
+hh_rec <- recipe(lnipcm ~ ., data = hhtrain) %>%
+  update_role(c("upm", "nvivi", "nhoga", "year", "fex", "facpob", "area", "ipcm", 
+                "linea_pobreza_total", "linea_pobreza_extrema", "totpov", "extpov"), new_role = "ID") %>%
+  step_impute_median(all_numeric_predictors()) %>% 
+  step_impute_mode(all_nominal_predictors()) %>%
+  step_mutate(vivi_piso1 = as_factor(case_when(vivi_piso %in% c("Porcelanato", "Parquet", "Otro", "Baldosa", "Madera") ~ "high",
+                                               vivi_piso %in% c("Ladrillo", "Lecherada") ~ "mid",
+                                               vivi_piso %in% c("Tierra") ~ "low")),
+              vivi_techo1 = as_factor(case_when(vivi_techo %in% c("Palma", "Hormigon", "Teja") ~ "high",
+                                                vivi_techo %in% c("Otro", "Zinc", "Fibrocemento") ~ "mid",
+                                                vivi_techo %in% c("Paja", "Madera", "Carton") ~ "low")),
+              vivi_agua_fuente1 = as_factor(case_when(vivi_agua_fuente %in% c("Caneria_vivienda") ~ "high",
+                                                      vivi_agua_fuente %in% c("Otros", "Vecino", "Caneria_terreno", "Pozo_terreno") ~ "low")),
+              vivi_banho_desague1 = as_factor(case_when(vivi_banho_desague %in% c("Camara_septica") ~ "high",
+                                                        vivi_banho_desague %in% c("Pozo_ciego") ~ "mid",
+                                                        vivi_banho_desague %in% c("Letrina_ventilada", "Letrina_comun", "Letrina_comun_sin_techo", "Red_sanitario", "Hoyo_abierto", "Otro", "No_banho") ~ "low")),
+              vivi_basura1 = as_factor(case_when(vivi_basura %in% c("Vertedero_municipal", "Recoleccion_publica", "Recoleccion_privada") ~ "high",
+                                                 vivi_basura %in% c("Otro", "Arroyo", "Hoyo", "Chacra", 
+                                                                    "Patio", "Quema") ~ "low")),
+              vivi_agua_fuente_beber1 = as_factor(case_when(vivi_agua_fuente_beber %in% c("Embotellada", "Canaeria_vivienda") ~ "high",
+                                                            vivi_agua_fuente_beber %in% c("Caneria_terreno", "Pozo_terreno", "Vecino", "Otros", "Canilla_publica") ~ "low")),
+              piezas_por_miembro = case_when(vivi_piezas == 0 ~ 1/hh_totpers,
+                                             vivi_piezas > 0 ~ vivi_piezas/hh_totpers)) %>% 
+  step_rm(vivi_piezas, vivi_dormitorios, hh_totpers, hh_dependents, hh_youth_dependents, hh_old_dependents, hh_males, vivi_piso, vivi_techo, vivi_agua_fuente, vivi_banho_desague, vivi_basura, vivi_vivienda_propiedad,  vivi_agua_fuente_beber) %>% 
+  step_log(hh_miembros_5ymenos, hh_miembros_6a14, hh_miembros_15a64, hh_miembros_65ymas, hh_females, hh_tiene_trabajo_remunerado, hh_tiene_trabajo_noremunerado, piezas_por_miembro, offset = 0.5) %>% 
+  step_dummy(all_nominal_predictors()) %>%
+  step_normalize(all_numeric_predictors()) %>%
+  step_zv(all_numeric_predictors()) %>%
+  check_missing(all_predictors())
 
+hh_prep <- hh_rec %>%
+  prep(log_changes = TRUE)
+
+# names(hh_prep$steps[[1]]$medians)
+# names(hh_prep$steps[[2]]$modes)
+# hh_prep$steps[[5]]$removals
+# 
+# training_data <- hh_rec %>% prep() %>% bake(new_data = NULL)
+
+# Lasso ----------------------------------------------------------------------------------
+lasso_spec <- linear_reg(penalty = 0.1, mixture = 1) %>%
+  set_engine("glmnet")
+
+wf <- workflow() %>%
+  add_recipe(hh_rec)
+
+lasso_fit <- wf %>%
+  add_model(lasso_spec) %>%
+  fit(data = hhtrain)
+
+lasso_fit %>%
+  extract_fit_parsnip() %>%
+  tidy() %>% View()
+
+# linear regression -------------------------------------------------------------------------------------------------
 lm_model <- 
   linear_reg() %>% 
   set_engine("lm") %>% 
   set_mode("regression")
+
+wf <- workflow() %>%
+  add_recipe(hh_rec)
+
+lm_fit <- wf %>%
+  add_model(lm_model) %>%
+  fit(data = hhtrain)
+
+lm_fit %>%
+  extract_fit_parsnip() %>%
+  tidy() %>% View()
+
+lm_last_fit <- 
+  lm_model %>% 
+  last_fit(hh_rec,
+           split = hhsplit)
+
+lm_last_fit %>% 
+  collect_metrics()
+
+lm_preds <- lm_last_fit %>% 
+  collect_predictions()
+
+
 
 lm_fit <- 
   lm_model %>% 

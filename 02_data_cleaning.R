@@ -80,6 +80,8 @@ full_file <-
          hh_females = sum(as.numeric(female==1)),
          hh_males = sum(as.numeric(female==0)),
          hh_tekopora = max(as.numeric(ing_tekopora>0)),
+         hh_tiene_trabajo_remunerado = sum(as.numeric(tiene_trabajo==1 & !is.na(tipo_empleo) & tipo_empleo %in% c(1:4,6,7,8))),
+         hh_tiene_trabajo_noremunerado = sum(as.numeric(tiene_trabajo==1 & !is.na(tipo_empleo) & tipo_empleo %in% c(5))),
          hh_totpers = totpers) %>%
   ungroup
 

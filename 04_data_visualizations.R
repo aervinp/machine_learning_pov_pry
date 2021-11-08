@@ -1,36 +1,165 @@
 library(tidyverse)
 library(janitor)
-library(skimr)
-
 library(tidymodels)
-library(gridExtra)
-library(lubridate)
-library(ggiraph)
-library(heatmaply)
-library(RColorBrewer)
-library(scales)
 
-library(mgcv)
-library(FactoMineR)
-library(vcd)
-library(colorspace)
+library(heatmaply)
+library(gridExtra)
 
 # load household data created in 03_encoding_categorical_numerical.R ----------------------------------------------------------------------
 
 hhfile <- read_rds("data/hh_merged_allyears_cleaned.rds")
 
-# training set
-training <- 
+# data year
+hh2018 <- 
   hhfile %>% 
   filter(year == 2018)
+
+# training and testing set ----------------------------------------------------------------------------------------------------------------
+set.seed(123)
+
+hhsplit <- 
+  hh2018 %>% 
+  initial_split(prop = 0.75, strata = ipcm)
+
+hhtraining <- 
+  training(hhsplit)
+
+hhtesting <- 
+  testing(hhsplit)
+
+# predictors -------------------------------------------------------------------------------------------
+## continuous ------------------------------------------------------------------------------------------
+
+cor_mat <- 
+  hhtraining %>% 
+  select(-c("upm", "nvivi", "nhoga", "year", "fex", "facpob", "area", "ipcm", "lnipcm", 
+            "linea_pobreza_total", "linea_pobreza_extrema", "totpov", "extpov")) %>% 
+  select(where(is.numeric)) %>% 
+  drop_na() %>% 
+  cor()
+
+cor_map <- 
+  heatmaply_cor(
+    cor_mat, 
+    symm = TRUE, 
+    cexRow = .0001, 
+    cexCol = .0001, 
+    branches_lwd = .1
+  ) 
+
+
+ggplot(hhtraining, aes(x = jefe_aniosestudio, y = lnipcm)) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method="lm") +
+  geom_smooth(method="loess")
+  
+summary(lm(lnipcm ~ log(hh_miembros_5ymenos+.5) + log(hh_miembros_6a14+0.5) + log(hh_miembros_15a64+0.5) + log(hh_miembros_65ymas+.5) + 
+             log(hh_females+0.5) + log(hh_tiene_trabajo_remunerado+0.5) + log(hh_tiene_trabajo_noremunerado+0.5) + jefe_edad + jefe_aniosestudio +
+             log((vivi_piezas+.5)/hh_totpers), data = hhtraining))
+
+## nominal -----------------------------------------------------------------------------------------------------------
+# removals
+# [1] "vivi_piso_Otro"                         "vivi_piso_Porcelanato"                  "vivi_techo_Palma"                      
+# [4] "vivi_agua_fuente_beber_Canilla_publica" "vivi_banho_desague_Otro"                "vivi_banho_desague_Hoyo_abierto"       
+# [7] "vivi_basura_Arroyo"                     "vivi_vivienda_propiedad_Ocupada_Hecho" 
+
+hhtraining %>% tabyl(vivi_piso) %>% tibble() %>% arrange(desc(percent))
+hhfile %>% tabyl(vivi_piso) %>% tibble() %>% arrange(desc(percent))
+tidy(lm(lnipcm ~ relevel(vivi_piso, ref="Tierra"), data=hhtraining)) %>% arrange(desc(estimate))
+ggplot(hhtraining, mapping = aes(x = reorder(vivi_piso, lnipcm, median), 
+                                 y = lnipcm)) + 
+  geom_boxplot() +
+  coord_flip() +
+  labs(y = "log(ipcm)", x = "vivi_piso")
+
+hhtraining %>% tabyl(vivi_techo) %>% tibble() %>% arrange(desc(percent))
+hhfile %>% tabyl(vivi_techo) %>% tibble() %>% arrange(desc(percent))
+tidy(lm(lnipcm ~ relevel(vivi_techo, ref="Fibrocemento"), data=hhtraining)) %>% arrange(desc(estimate))
+ggplot(hhtraining, mapping = aes(x = reorder(vivi_techo, lnipcm, median), 
+                                 y = lnipcm)) + 
+  geom_boxplot() +
+  coord_flip() +
+  labs(y = "log(ipcm)", x = "vivi_techo")
+
+hhtraining %>% tabyl(vivi_agua_fuente) %>% tibble() %>% arrange(desc(percent))
+hhfile %>% tabyl(vivi_agua_fuente) %>% tibble() %>% arrange(desc(percent))
+tidy(lm(lnipcm ~ relevel(vivi_agua_fuente, ref="Vecino"), data=hhtraining)) %>% arrange(desc(estimate))
+ggplot(hhtraining, mapping = aes(x = reorder(vivi_agua_fuente, lnipcm, median), 
+                                 y = lnipcm)) + 
+  geom_boxplot() +
+  coord_flip() +
+  labs(y = "log(ipcm)", x = "vivi_agua_fuente")
+
+hhtraining %>% tabyl(vivi_banho_desague) %>% tibble() %>% arrange(desc(percent))
+hhfile %>% tabyl(vivi_banho_desague) %>% tibble() %>% arrange(desc(percent))
+tidy(lm(lnipcm ~ relevel(vivi_banho_desague, ref="Letrina_ventilada"), data=hhtraining)) %>% arrange(desc(estimate))
+ggplot(hhtraining, mapping = aes(x = reorder(vivi_banho_desague, lnipcm, median), 
+                                 y = lnipcm)) + 
+  geom_boxplot() +
+  coord_flip() +
+  labs(y = "log(ipcm)", x = "vivi_banho_desague")
+
+hhtraining %>% tabyl(vivi_basura) %>% tibble() %>% arrange(desc(percent))
+hhfile %>% tabyl(vivi_basura) %>% tibble() %>% arrange(desc(percent))
+tidy(lm(lnipcm ~ relevel(vivi_basura, ref="Vertedero_municipal"), data=hhtraining)) %>% arrange(desc(estimate))
+ggplot(hhfile, mapping = aes(x = reorder(vivi_basura, lnipcm, median), 
+                                 y = lnipcm)) + 
+  geom_boxplot() +
+  coord_flip() +
+  labs(y = "log(ipcm)", x = "vivi_basura")
+
+vivi_agua_fuente_beber_Canilla_publica
+
+hhtraining %>% tabyl(vivi_agua_fuente_beber) %>% tibble() %>% arrange(desc(percent))
+hhfile %>% tabyl(vivi_agua_fuente_beber) %>% tibble() %>% arrange(desc(percent))
+tidy(lm(lnipcm ~ relevel(vivi_agua_fuente_beber, ref="Vecino"), data=hhtraining)) %>% arrange(desc(estimate))
+ggplot(hhfile, mapping = aes(x = reorder(vivi_agua_fuente_beber, lnipcm, median), 
+                             y = lnipcm)) + 
+  geom_boxplot() +
+  coord_flip() +
+  labs(y = "log(ipcm)", x = "vivi_agua_fuente_beber")
+
+
+hhfile <- 
+  hhfile %>% 
+    mutate(vivi_piso1 = as_factor(case_when(vivi_piso %in% c("Porcelanato", "Parquet", "Otro", "Baldosa", "Madera") ~ "high",
+                                            vivi_piso %in% c("Ladrillo", "Lecherada") ~ "mid",
+                                            vivi_piso %in% c("Tierra") ~ "low")),
+           vivi_techo1 = as_factor(case_when(vivi_techo %in% c("Palma", "Hormigon", "Teja") ~ "high",
+                                             vivi_techo %in% c("Otro", "Zinc", "Fibrocemento") ~ "mid",
+                                             vivi_techo %in% c("Paja", "Madera", "Carton") ~ "low")),
+           vivi_agua_fuente1 = as_factor(case_when(vivi_agua_fuente %in% c("Caneria_vivienda") ~ "high",
+                                                   vivi_agua_fuente %in% c("Otros", "Vecino", "Caneria_terreno", "Pozo_terreno") ~ "low")),
+           vivi_banho_desague1 = as_factor(case_when(vivi_banho_desague %in% c("Camara_septica") ~ "high",
+                                                     vivi_banho_desague %in% c("Pozo_ciego") ~ "mid",
+                                                     vivi_banho_desague %in% c("Letrina_ventilada", "Letrina_comun", "Letrina_comun_sin_techo", "Red_sanitario", "Hoyo_abierto", "Otro", "No_banho") ~ "low")),
+           vivi_basura1 = as_factor(case_when(vivi_basura %in% c("Vertedero_municipal", "Recoleccion_publica", "Recoleccion_privada") ~ "high",
+                                              vivi_basura %in% c("Otro", "Arroyo", "Hoyo", "Chacra", 
+                                                                 "Patio", "Quema") ~ "low")),
+           vivi_agua_fuente_beber1 = as_factor(case_when(vivi_agua_fuente_beber %in% c("Embotellada", "Canaeria_vivienda") ~ "high",
+                                                         vivi_agua_fuente_beber %in% c("Caneria_terreno", "Pozo_terreno", "Vecino", "Otros", "Canilla_publica") ~ "low")))
+
+tidy(lm(lnipcm ~ relevel(vivi_piso1, ref="mid"), data=hhfile)) %>% arrange(desc(estimate))
+tidy(lm(lnipcm ~ relevel(vivi_techo1, ref="mid"), data=hhfile)) %>% arrange(desc(estimate))
+tidy(lm(lnipcm ~ relevel(vivi_agua_fuente1, ref="low"), data=hhfile)) %>% arrange(desc(estimate))
+tidy(lm(lnipcm ~ relevel(vivi_banho_desague1, ref="mid"), data=hhfile)) %>% arrange(desc(estimate))
+tidy(lm(lnipcm ~ relevel(vivi_basura1, ref="low"), data=hhfile)) %>% arrange(desc(estimate))
+
+hhtraining %>% tabyl(jefe_idioma) %>% tibble() %>% arrange(desc(percent))
+tidy(lm(lnipcm ~ relevel(jefe_idioma, ref="Bilingual"), data=hhtraining)) %>% arrange(desc(estimate))
+ggplot(hhtraining, mapping = aes(x = reorder(jefe_idioma, lnipcm, median), 
+                                 y = lnipcm)) + 
+  geom_boxplot() +
+  coord_flip() +
+  labs(y = "log(ipcm)", x = "jefe_idioma")
 
 # continuous outcomes -----------------------------------------------------------------------------------------------------
 ## histogram ---------------------------------------------------------------------------------
 
 hist_ipcm <- 
-  ggplot(training, aes(ipcm)) +   
-  geom_histogram(binwidth = 500000, col = "#D53E4F", fill = "#D53E4F", alpha = .5) +  
-  xlab("monthly income per capita") +
+  ggplot(hhtraining, aes(lnipcm)) +   
+  geom_histogram(binwidth = 1, col = "#D53E4F", fill = "#D53E4F", alpha = .5) +  
+  xlab("log monthly income per capita") +
   ylab("Frequency") +
   ggtitle("(a)") +
   theme(
@@ -45,9 +174,9 @@ hist_ipcm <-
 ## boxplot ---------------------------------------------------------------------------------------------------
 
 box_ipcm <-
-  ggplot(training, aes(x = "", y = ipcm)) +
+  ggplot(hhtraining, aes(x = "", y = lnipcm)) +
   geom_boxplot(alpha = 0.2) +
-  ylab("monthly income per capita") +
+  ylab("log monthly income per capita") +
   ggtitle("(b)") +
   theme(
     axis.title.x = element_blank(),
@@ -62,9 +191,9 @@ box_ipcm <-
 ## violin ------------------------------------------------------------------------
 
 violin_ipcm <-
-  ggplot(training, aes(x = "", y = ipcm)) +
+  ggplot(hhtraining, aes(x = "", y = lnipcm)) +
   geom_violin(alpha = 0.2) +
-  ylab("monthly income per capita") +
+  ylab("log monthly income per capita") +
   ggtitle("(c)") +
   theme(
     axis.title.y = element_blank(),
@@ -77,21 +206,54 @@ violin_ipcm <-
 
 grid.arrange(hist_ipcm, box_ipcm, violin_ipcm, nrow = 3, ncol = 1, heights = c(2, 1, 1))
 
-
 # predictors -------------------------------------------------------------------------
 ## categorical on continuous outcome ------------------------------------------------------------------------
 
-ggplot(training, mapping = aes(x = reorder(as.factor(dptorep), ipcm, median), 
+hhtraining %>% tabyl(jefe_idioma) %>% tibble() %>% arrange(desc(percent))
+tidy(lm(lnipcm ~ relevel(jefe_idioma, ref="Bilingual"), data=hhtraining)) %>% arrange(desc(estimate))
+ggplot(hhtraining, mapping = aes(x = reorder(jefe_idioma, lnipcm, median), 
+                                 y = lnipcm)) + 
+  geom_boxplot() +
+  coord_flip() +
+  labs(y = "log(ipcm)", x = "jefe_idioma")
+
+
+ggplot(hhtraining, mapping = aes(x = reorder(dptorep, lnipcm, median), 
                                y = log(ipcm))) + 
   geom_boxplot() +
   coord_flip() +
   labs(y = "log(ipcm)", x = "dptorep")
 
-ggplot(training, mapping = aes(x = reorder(as.factor(jefe_idioma), ipcm, median), 
-                               y = log(ipcm))) + 
-  geom_boxplot() +
-  coord_flip() +
-  labs(y = "log(ipcm)", x = "jefe_idioma")
+
+##continuous on continuous outcome -------------------------------------------------------------------------
+
+ggplot(training, aes(x = hh_totpers, y = log(ipcm))) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method="loess") +
+  geom_smooth(method="lm")
+
+ggplot(training, aes(x = vivi_dormitorios, y = log(ipcm))) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method="loess") +
+  geom_smooth(method="lm")
+
+ggplot(training, aes(x = vivi_piezas, y = log(ipcm))) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method="loess")+
+  geom_smooth(method="lm")
+
+ggplot(training, aes(x = log(vivi_piezas/hh_totpers), y = log(ipcm))) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method="loess") +
+  geom_smooth(method="lm")
+
+ggplot(training, aes(x = jefe_edad, y = log(ipcm))) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method="loess")
+
+ggplot(training, aes(x = jefe_aniosestudio, y = log(ipcm))) +
+  geom_point(alpha = 0.2) +
+  geom_smooth(method="loess")
 
 ## categorical on discrete outcome ----------------------------------------------------------------
 binom_stats <- function(x, ...) {
@@ -147,36 +309,6 @@ ci_plots <-
 
 grid.arrange(bars, stacked_vars, ci_plots, ncol = 1, heights= c(4, 3, 3))
 
-##continuous on continuous outcome -------------------------------------------------------------------------
-
-ggplot(training, aes(x = hh_totpers, y = log(ipcm))) +
-  geom_point(alpha = 0.2) +
-  geom_smooth(method="loess") +
-  geom_smooth(method="lm")
-
-ggplot(training, aes(x = vivi_dormitorios, y = log(ipcm))) +
-  geom_point(alpha = 0.2) +
-  geom_smooth(method="loess") +
-  geom_smooth(method="lm")
-
-ggplot(training, aes(x = vivi_piezas, y = log(ipcm))) +
-  geom_point(alpha = 0.2) +
-  geom_smooth(method="loess")+
-  geom_smooth(method="lm")
-
-ggplot(training, aes(x = log(vivi_piezas/hh_totpers), y = log(ipcm))) +
-  geom_point(alpha = 0.2) +
-  geom_smooth(method="loess") +
-  geom_smooth(method="lm")
-
-ggplot(training, aes(x = jefe_edad, y = log(ipcm))) +
-  geom_point(alpha = 0.2) +
-  geom_smooth(method="loess")
-
-ggplot(training, aes(x = jefe_aniosestudio, y = log(ipcm))) +
-  geom_point(alpha = 0.2) +
-  geom_smooth(method="loess")
-
 ## continuous on categorical outcome -----------------------------------------------------------------------------
 gam_dat <- 
   training %>% 
@@ -225,7 +357,7 @@ totpers_gam <-
 
 grid.arrange(totpers_hist, totpers_gam, ncol = 1, heights= c(2, 1.25))
 
-
+# Predictor relationships ---------------------------------------------------------------------------------------------
 ## correlation between continuous predictors --------------------------------------------------------------------------
 
 cor_mat <- 

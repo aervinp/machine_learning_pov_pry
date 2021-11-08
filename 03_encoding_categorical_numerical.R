@@ -85,7 +85,7 @@ hhfile_clean <-
                                                          vivi_agua_proveedor_beber==11 ~ "Embotellada",
                                                          vivi_agua_proveedor_beber==13 ~ "Rio")),
          vivi_agua_fuente_beber = as_factor(case_when(vivi_agua_fuente_beber==1 ~ "Caneria_terreno",
-                                                      vivi_agua_fuente_beber==2 ~ "Caaeria_vivienda",
+                                                      vivi_agua_fuente_beber==2 ~ "Canaeria_vivienda",
                                                       vivi_agua_fuente_beber==3 ~ "Canilla_publica",
                                                       vivi_agua_fuente_beber==4 ~ "Pozo_terreno",
                                                       vivi_agua_fuente_beber==5 ~ "Vecino",
