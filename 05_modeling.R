@@ -1,6 +1,7 @@
 library(tidyverse)
 library(tidymodels)
 library(glmnet)
+library(vip)
 
 # data ---------------------------------------------------------------------------------------------
 
@@ -84,10 +85,10 @@ hh_prep <- hh_rec %>%
 # names(hh_prep$steps[[2]]$modes)
 # hh_prep$steps[[5]]$removals
 # 
-# training_data <- hh_rec %>% prep() %>% bake(new_data = NULL)
+
 
 # Lasso ----------------------------------------------------------------------------------
-lasso_spec <- linear_reg(penalty = 0.1, mixture = 1) %>%
+lasso_spec <- linear_reg(penalty = 1, mixture = 1) %>%
   set_engine("glmnet")
 
 wf <- workflow() %>%
@@ -101,6 +102,61 @@ lasso_fit %>%
   extract_fit_parsnip() %>%
   tidy() %>% View()
 
+
+# Lasso w/ tuning----------------------------------------------------------------------------------
+lasso_tune <- linear_reg(penalty = tune(), mixture = 1) %>%
+  set_engine("glmnet")
+
+# set.seed(321)
+p_regular <- grid_regular(penalty(), levels = 50)
+# p_random <- grid_random(parameters(lasso_tune), size = 10)
+
+wf <- workflow() %>%
+  add_recipe(hh_rec)
+
+p_tuning <-
+  wf %>% 
+  add_model(lasso_tune) %>% 
+  tune_grid(resamples = hhfolds,
+            grid = p_regular,
+            metrics = metric_set(rmse))
+
+p_tuning %>% 
+  collect_metrics() %>% 
+  ggplot(aes(penalty, mean, color = .metric)) +
+  geom_errorbar(aes(
+    ymin = mean - std_err,
+    ymax = mean + std_err
+  ),
+  alpha = 0.5
+  ) +
+  geom_line(size = 1.5) +
+  facet_wrap(~.metric, scales = "free", nrow = 2) +
+  scale_x_log10() +
+  theme(legend.position = "none")
+
+lowest_rmse <- 
+  p_tuning %>% 
+  select_best("rmse")
+
+final_lasso <- finalize_workflow(
+  wf %>% add_model(lasso_tune),
+  lowest_rmse
+)
+
+final_lasso %>%
+  fit(hhtrain) %>%
+  extract_fit_parsnip() %>%
+  vi(lambda = lowest_rmse$penalty) %>%
+  mutate(
+    Importance = abs(Importance),
+    Variable = fct_reorder(Variable, Importance)
+  ) %>%
+  ggplot(aes(x = Importance, y = Variable, fill = Sign)) +
+  geom_col() +
+  scale_x_continuous(expand = c(0, 0)) +
+  labs(y = NULL)
+  
 # linear regression -------------------------------------------------------------------------------------------------
 lm_model <- 
   linear_reg() %>% 
@@ -129,7 +185,53 @@ lm_last_fit %>%
 lm_preds <- lm_last_fit %>% 
   collect_predictions()
 
+## cross-validation ----------------------------------------------------------------------------------------------
 
+lm_rs_fit <- 
+  wf %>% 
+  add_model(lm_model) %>% 
+  fit_resamples(resamples = hhfolds)
+
+lm_rs_fit %>% collect_metrics(summarize = FALSE) %>% filter(.metric=="rmse")
+
+
+## linear reg post lasso -----------------------------------------------------------------------------------------
+vars <- final_lasso %>%
+  fit(hhtrain) %>%
+  extract_fit_parsnip() %>% tidy() %>% filter(estimate!=0) %>% pull(term)
+
+vars <- vars[-1]
+
+training_data_prep <- hh_rec %>% prep() %>% bake(new_data = hh2018)
+
+hhprepsplit <- 
+  training_data_prep %>% initial_split(prop = 0.75, strata = ipcm, breaks = 10)
+
+training_data_preptrain <- training(hhprepsplit)
+training_data_preptest <- testing(hhprepsplit)
+
+hh_rec2 <- recipe(formula(paste0("lnipcm ~ ", paste(vars, collapse = "+"))), data = training_data_preptrain)
+
+lm_model <- 
+  linear_reg() %>% 
+  set_engine("lm") %>% 
+  set_mode("regression")
+
+wf <- workflow() %>%
+  add_recipe(hh_rec2) %>% 
+  add_model(lm_model)
+
+lm_last_fit <- 
+  wf %>% 
+  last_fit(split = hhprepsplit)
+
+lm_last_fit %>%  
+  extract_fit_parsnip() %>%
+  tidy() %>% 
+  View()
+
+
+##################################################################
 
 lm_fit <- 
   lm_model %>% 

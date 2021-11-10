@@ -9,6 +9,23 @@ library(gridExtra)
 
 hhfile <- read_rds("data/hh_merged_allyears_cleaned.rds")
 
+
+# some explorations ----------------------------------------------------------------------------------------------------------------------
+hhfile <- 
+  hhfile %>% 
+  mutate(hh_tiene_trabajo_remunerado = case_when(jefe_tipo_empleo %in% c("Cuenta_propia", "Publico", "Patron", "Privado", "Domestico",
+                                                                         "Empleado_extranjero", "Empleador_extranjero") ~ hh_tiene_trabajo_remunerado-1,
+                                                 TRUE ~ hh_tiene_trabajo_remunerado),
+         perc_tiene_trabajo_remunerado = (hh_tiene_trabajo_remunerado/(hh_totpers-1)),
+         perc_tiene_trabajo_remunerado = replace(perc_tiene_trabajo_remunerado, hh_totpers==1, 0),
+         perc_females = hh_females/hh_totpers,
+         perc_hh_miembros_6a14 = hh_miembros_6a14/hh_totpers,
+         perc_hh_miembros_15a64 = hh_miembros_15a64/hh_totpers,
+         perc_hh_miembros_65ymas = hh_miembros_65ymas/hh_totpers,
+         jefe_65ymas = as_factor(case_when(jefe_edad>=65 ~ "Yes",
+                                 TRUE ~ "No")))
+  
+
 # data year
 hh2018 <- 
   hhfile %>% 
@@ -48,7 +65,7 @@ cor_map <-
   ) 
 
 
-ggplot(hhtraining, aes(x = jefe_aniosestudio, y = lnipcm)) +
+ggplot(hhtraining, aes(x = log(hh_tiene_trabajo_remunerado+.5), y = lnipcm)) +
   geom_point(alpha = 0.2) +
   geom_smooth(method="lm") +
   geom_smooth(method="loess")
@@ -56,6 +73,9 @@ ggplot(hhtraining, aes(x = jefe_aniosestudio, y = lnipcm)) +
 summary(lm(lnipcm ~ log(hh_miembros_5ymenos+.5) + log(hh_miembros_6a14+0.5) + log(hh_miembros_15a64+0.5) + log(hh_miembros_65ymas+.5) + 
              log(hh_females+0.5) + log(hh_tiene_trabajo_remunerado+0.5) + log(hh_tiene_trabajo_noremunerado+0.5) + jefe_edad + jefe_aniosestudio +
              log((vivi_piezas+.5)/hh_totpers), data = hhtraining))
+
+summary(lm(lnipcm ~ log(hh_totpers+.5) + log(hh_tiene_trabajo_remunerado+0.5) + jefe_aniosestudio +
+             log((vivi_piezas+.5)/hh_totpers) + jefe_tipo_empleo + jefe_caja_jubilacion1 + jefe_65ymas, data = hhtraining))
 
 ## nominal -----------------------------------------------------------------------------------------------------------
 # removals
